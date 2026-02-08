@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
+import { geocodeLocation } from "@/lib/geocode";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -10,12 +12,28 @@ import {
   ChevronRight,
   ExternalLink,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import VisibilityPicker from "@/components/events/VisibilityPicker";
 import VibeBadge from "@/components/events/VibeBadge";
 import { VIBES, VIBE_CLASSES } from "@/lib/types";
-import type { Vibe, EventVisibility, Suggestion, AiPreferences } from "@/lib/types";
+import type {
+  Vibe,
+  EventVisibility,
+  Suggestion,
+  AiPreferences,
+} from "@/lib/types";
+import type { MapPin as MapPinType } from "@/components/maps/EventMap";
+
+const EventMap = dynamic(() => import("@/components/maps/EventMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full rounded-4xl bg-cream-200/50 border border-cream-300/50 flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-coral-400 border-t-transparent rounded-full animate-spin" />
+    </div>
+  ),
+});
 
 export default function CreateEventPage() {
   const router = useRouter();
@@ -23,6 +41,7 @@ export default function CreateEventPage() {
   const [step, setStep] = useState<"choice" | "manual" | "ai">("choice");
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [geocoding, setGeocoding] = useState(false);
 
   const [aiPrefs, setAiPrefs] = useState<AiPreferences>({
     vibe: "chill",
@@ -47,6 +66,7 @@ export default function CreateEventPage() {
 
   const [sanityCheck, setSanityCheck] = useState<string | null>(null);
 
+  // ── AI Finder ─────────────────────────────────────────
   const handleAiFinder = async () => {
     setLoading(true);
     setSuggestions([]);
@@ -78,6 +98,36 @@ export default function CreateEventPage() {
     setStep("manual");
   };
 
+  const suggestionPins: MapPinType[] = suggestions
+    .filter((s) => s.lat && s.lng)
+    .map((s, idx) => ({
+      id: `suggestion-${idx}`,
+      lat: s.lat!,
+      lng: s.lng!,
+      title: s.activity,
+      vibe: s.vibe,
+      subtitle: s.reason,
+    }));
+
+  // ── Geocoding ─────────────────────────────────────────
+  const geocodeOnBlur = async () => {
+    if (!form.locationName || (form.latitude && form.longitude)) return;
+    setGeocoding(true);
+    try {
+      const result = await geocodeLocation(form.locationName);
+      if (result) {
+        setForm((prev) => ({
+          ...prev,
+          latitude: result.lat,
+          longitude: result.lng,
+        }));
+      }
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  // ── Sanity Check ──────────────────────────────────────
   const checkPlan = async () => {
     setLoading(true);
     try {
@@ -100,6 +150,7 @@ export default function CreateEventPage() {
     }
   };
 
+  // ── Submit ────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -155,7 +206,9 @@ export default function CreateEventPage() {
       {/* Header */}
       <div className="flex items-center gap-5">
         <button
-          onClick={() => (step === "choice" ? router.push("/home") : setStep("choice"))}
+          onClick={() =>
+            step === "choice" ? router.push("/home") : setStep("choice")
+          }
           className="w-11 h-11 rounded-full border border-cream-300/50 flex items-center justify-center text-charcoal-400 hover:bg-cream-200/50 transition-colors bg-cream-50 shadow-warm"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -301,7 +354,9 @@ export default function CreateEventPage() {
                     onClick={() => selectSuggestion(s)}
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-charcoal-700">{s.activity}</h4>
+                      <h4 className="font-bold text-charcoal-700">
+                        {s.activity}
+                      </h4>
                       <VibeBadge vibe={s.vibe} />
                     </div>
                     <p className="text-sm text-charcoal-400 mb-2">{s.reason}</p>
@@ -318,14 +373,23 @@ export default function CreateEventPage() {
           </div>
 
           <div className="lg:col-span-7 h-[calc(100vh-250px)] sticky top-32">
-            <div className="card h-full flex items-center justify-center text-charcoal-300 font-medium">
-              <div className="text-center">
-                <MapPin className="w-8 h-8 mx-auto mb-3 text-charcoal-200" />
-                <p className="text-sm">
-                  Map will display suggestions here
-                </p>
+            {suggestionPins.length > 0 ? (
+              <EventMap
+                pins={suggestionPins}
+                height="h-full"
+                onPinClick={(id) => {
+                  const idx = parseInt(id.replace("suggestion-", ""), 10);
+                  if (suggestions[idx]) selectSuggestion(suggestions[idx]);
+                }}
+              />
+            ) : (
+              <div className="card h-full flex items-center justify-center text-charcoal-300 font-medium">
+                <div className="text-center">
+                  <MapPin className="w-8 h-8 mx-auto mb-3 text-charcoal-200" />
+                  <p className="text-sm">Map will display suggestions here</p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -354,11 +418,37 @@ export default function CreateEventPage() {
                   <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-charcoal-300" />
                   <input
                     required
-                    className="input-warm pl-12"
+                    className="input-warm pl-12 pr-24"
                     placeholder="Central Park Fountain..."
                     value={form.locationName}
-                    onChange={(e) => update("locationName", e.target.value)}
+                    onChange={(e) => {
+                      // Clear coords when user edits so it re-geocodes on blur
+                      setForm((prev) => ({
+                        ...prev,
+                        locationName: e.target.value,
+                        latitude: undefined,
+                        longitude: undefined,
+                      }));
+                    }}
+                    onBlur={geocodeOnBlur}
                   />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2">
+                    {geocoding ? (
+                      <span className="text-[10px] font-bold text-charcoal-300 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Pinning...
+                      </span>
+                    ) : form.latitude && form.longitude ? (
+                      <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Pinned
+                      </span>
+                    ) : form.locationName ? (
+                      <span className="text-[10px] font-medium text-charcoal-300">
+                        Tab to pin
+                      </span>
+                    ) : null}
+                  </span>
                 </div>
               </div>
 

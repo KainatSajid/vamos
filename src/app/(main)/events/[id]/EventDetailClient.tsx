@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -13,13 +14,28 @@ import {
   ExternalLink,
   Share2,
   CheckCircle2,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import VibeBadge from "@/components/events/VibeBadge";
 import type { SocialEvent } from "@/lib/types";
+import type { MapPin as MapPinType } from "@/components/maps/EventMap";
+
+const EventMap = dynamic(() => import("@/components/maps/EventMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[300px] rounded-4xl bg-cream-200/50 border border-cream-300/50 flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-coral-400 border-t-transparent rounded-full animate-spin" />
+    </div>
+  ),
+});
 
 export default function EventDetailClient({ event }: { event: SocialEvent }) {
   const router = useRouter();
   const [reminded, setReminded] = useState(false);
+  const [vibeCheck, setVibeCheck] = useState<string | null>(null);
+  const [vibeLoading, setVibeLoading] = useState(false);
+  const [vibeOpen, setVibeOpen] = useState(false);
 
   const formattedDate = new Date(event.start_time).toLocaleDateString("en-US", {
     weekday: "long",
@@ -45,12 +61,73 @@ export default function EventDetailClient({ event }: { event: SocialEvent }) {
     window.open(url, "_blank");
   };
 
-  const hostInitials = (event.host?.display_name || "?")
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  const openInMaps = () => {
+    const query =
+      event.latitude && event.longitude
+        ? `${event.latitude},${event.longitude}`
+        : encodeURIComponent(event.location_name);
+    window.open(
+      `https://www.google.com/maps/search/?api=1&query=${query}`,
+      "_blank"
+    );
+  };
+
+  const fetchVibeCheck = async () => {
+    if (vibeCheck) {
+      setVibeOpen(!vibeOpen);
+      return;
+    }
+
+    setVibeLoading(true);
+    setVibeOpen(true);
+
+    try {
+      const dateStr = new Date(event.start_time).toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+      const timeStr = new Date(event.start_time).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+
+      const res = await fetch("/api/ai/sanity-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: event.title,
+          location: event.location_name,
+          date: dateStr,
+          time: timeStr,
+        }),
+      });
+
+      const data = await res.json();
+      setVibeCheck(
+        data.feedback || data.message || "Could not get a vibe check right now."
+      );
+    } catch {
+      setVibeCheck("Could not get a vibe check right now. Try again later.");
+    } finally {
+      setVibeLoading(false);
+    }
+  };
+
+  const hasCoords = event.latitude && event.longitude;
+  const mapPins: MapPinType[] = hasCoords
+    ? [
+        {
+          id: event.id,
+          lat: event.latitude!,
+          lng: event.longitude!,
+          title: event.title,
+          vibe: event.vibe,
+          subtitle: event.location_name,
+        },
+      ]
+    : [];
 
   return (
     <div className="max-w-5xl mx-auto pb-20 animate-fade-in">
@@ -79,6 +156,7 @@ export default function EventDetailClient({ event }: { event: SocialEvent }) {
             </h1>
           </header>
 
+          {/* Event details card */}
           <div className="card p-10 space-y-10">
             <div className="grid grid-cols-2 gap-8">
               <div className="space-y-3">
@@ -110,7 +188,10 @@ export default function EventDetailClient({ event }: { event: SocialEvent }) {
                 <p className="font-serif text-2xl text-charcoal-800">
                   {event.location_name}
                 </p>
-                <button className="flex items-center gap-2 text-coral-400 font-semibold text-sm bg-coral-50 px-4 py-2 rounded-xl hover:bg-coral-100 transition-colors">
+                <button
+                  onClick={openInMaps}
+                  className="flex items-center gap-2 text-coral-400 font-semibold text-sm bg-coral-50 px-4 py-2 rounded-xl hover:bg-coral-100 transition-colors"
+                >
                   <span>Maps</span>
                   <ExternalLink className="w-3 h-3" />
                 </button>
@@ -128,6 +209,74 @@ export default function EventDetailClient({ event }: { event: SocialEvent }) {
               </p>
             </div>
           </div>
+
+          {/* AI Vibe Check -- between details and map */}
+          <div className="card p-7 space-y-5">
+            <button
+              onClick={fetchVibeCheck}
+              disabled={vibeLoading}
+              className="w-full flex items-center justify-between group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-brand-gradient flex items-center justify-center shadow-sm">
+                  <Sparkles className="w-4 h-4 text-white" />
+                </div>
+                <div className="text-left">
+                  <h4 className="font-semibold text-charcoal-700 text-sm">
+                    AI Vibe Check
+                  </h4>
+                  <p className="text-[11px] text-charcoal-400">
+                    Get the lowdown on this spot
+                  </p>
+                </div>
+              </div>
+              {vibeLoading ? (
+                <Loader2 className="w-4 h-4 text-coral-400 animate-spin" />
+              ) : (
+                <span className="text-[10px] font-bold text-coral-400 uppercase tracking-widest group-hover:underline">
+                  {vibeCheck ? (vibeOpen ? "Hide" : "Show") : "Check"}
+                </span>
+              )}
+            </button>
+
+            {vibeOpen && vibeCheck && (
+              <div className="animate-fade-in">
+                <div className="bg-cream-200/40 rounded-2xl p-5 border border-cream-300/40">
+                  <p className="text-sm text-charcoal-500 leading-relaxed whitespace-pre-line">
+                    {vibeCheck}
+                  </p>
+                </div>
+                <p className="text-[10px] text-charcoal-300 mt-3 text-center font-medium">
+                  Powered by Gemini
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Map */}
+          {hasCoords ? (
+            <EventMap
+              pins={mapPins}
+              singlePin
+              height="h-[300px]"
+              interactive={false}
+            />
+          ) : (
+            <div className="h-[200px] rounded-4xl bg-cream-200/30 border border-cream-300/50 flex items-center justify-center">
+              <div className="text-center">
+                <MapPin className="w-6 h-6 mx-auto mb-2 text-charcoal-200" />
+                <p className="text-sm text-charcoal-300 font-medium">
+                  No exact location pinned
+                </p>
+                <button
+                  onClick={openInMaps}
+                  className="text-coral-400 text-sm font-semibold mt-2 hover:underline"
+                >
+                  Search in Google Maps
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -139,8 +288,8 @@ export default function EventDetailClient({ event }: { event: SocialEvent }) {
               Low Pressure Only.
             </h3>
             <p className="text-charcoal-300 text-sm leading-relaxed relative">
-              ¡Vamos! is about showing up because you want to, not because you
-              said you would. No one is tracking you.
+              &iexcl;Vamos! is about showing up because you want to, not because
+              you said you would. No one is tracking you.
             </p>
 
             <div className="space-y-3 relative">

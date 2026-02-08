@@ -55,9 +55,9 @@ export default async function HomePage() {
         events={eventsWithHosts}
         circles={circlesWithCount}
       />
-      <pre className="text-xs text-red-500 p-4 fixed bottom-0 left-0 bg-white z-50">
+      {/* <pre className="text-xs text-red-500 p-4 fixed bottom-0 left-0 bg-white z-50">
         {JSON.stringify({ eventsError, eventCount: events?.length, userId: user.id }, null, 2)}
-      </pre>
+      </pre> */}
     </>
   );
 }

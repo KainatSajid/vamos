@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   LayoutGrid,
   Map as MapIcon,
@@ -13,6 +15,17 @@ import {
 } from "lucide-react";
 import EventCard from "@/components/events/EventCard";
 import type { Profile, SocialEvent, Circle } from "@/lib/types";
+import type { MapPin } from "@/components/maps/EventMap";
+
+// Dynamically import map to avoid SSR issues with Leaflet
+const EventMap = dynamic(() => import("@/components/maps/EventMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[600px] rounded-4xl bg-cream-200/50 border border-cream-300/50 flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-coral-400 border-t-transparent rounded-full animate-spin" />
+    </div>
+  ),
+});
 
 interface HomeClientProps {
   profile: Profile;
@@ -26,7 +39,26 @@ export default function HomeClient({
   circles,
 }: HomeClientProps) {
   const [viewMode, setViewMode] = useState<"feed" | "map">("feed");
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const router = useRouter();
   const firstName = profile.display_name.split(" ")[0];
+
+  // Convert events with coordinates to map pins
+  const mapPins: MapPin[] = events
+    .filter((e) => e.latitude && e.longitude)
+    .map((e) => ({
+      id: e.id,
+      lat: e.latitude!,
+      lng: e.longitude!,
+      title: e.title,
+      vibe: e.vibe,
+      subtitle: e.location_name,
+      active: e.id === selectedEventId,
+    }));
+
+  const handlePinClick = (id: string) => {
+    router.push(`/events/${id}`);
+  };
 
   return (
     <div className="space-y-10 pb-20 animate-fade-in">
@@ -164,21 +196,21 @@ export default function HomeClient({
               <div className="flex items-center gap-3 text-sm text-charcoal-500">
                 <Globe className="w-4 h-4 text-charcoal-300" />
                 <span>
-                  <span className="font-semibold">Public</span> — everyone sees
+                  <span className="font-semibold">Public</span> &mdash; everyone sees
                   it
                 </span>
               </div>
               <div className="flex items-center gap-3 text-sm text-charcoal-500">
                 <Users className="w-4 h-4 text-charcoal-300" />
                 <span>
-                  <span className="font-semibold">Friends</span> — your friend
+                  <span className="font-semibold">Friends</span> &mdash; your friend
                   list
                 </span>
               </div>
               <div className="flex items-center gap-3 text-sm text-charcoal-500">
                 <Lock className="w-4 h-4 text-charcoal-300" />
                 <span>
-                  <span className="font-semibold">Circles</span> — specific
+                  <span className="font-semibold">Circles</span> &mdash; specific
                   groups
                 </span>
               </div>
@@ -186,13 +218,38 @@ export default function HomeClient({
           </aside>
         </div>
       ) : (
-        <div className="card h-[600px] relative overflow-hidden">
-          <div className="absolute inset-0 bg-cream-200/50 flex items-center justify-center text-charcoal-300 font-medium">
-            <div className="text-center">
-              <MapIcon className="w-10 h-10 mx-auto mb-3 text-charcoal-200" />
-              <p>Map view requires Leaflet — add to your .env to enable</p>
+        /* Map view */
+        <div className="space-y-6">
+          {mapPins.length > 0 ? (
+            <EventMap
+              pins={mapPins}
+              height="h-[600px]"
+              onPinClick={handlePinClick}
+            />
+          ) : (
+            <div className="card h-[600px] relative overflow-hidden">
+              <div className="absolute inset-0 bg-cream-200/50 flex items-center justify-center text-charcoal-300 font-medium">
+                <div className="text-center">
+                  <MapIcon className="w-10 h-10 mx-auto mb-3 text-charcoal-200" />
+                  <p className="text-charcoal-400 font-medium mb-2">
+                    No events with locations yet
+                  </p>
+                  <p className="text-sm text-charcoal-300">
+                    Events created with the AI finder will show on the map
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Event list below map */}
+          {events.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {events.map((event) => (
+                <EventCard key={event.id} event={event} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
