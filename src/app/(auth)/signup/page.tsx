@@ -43,7 +43,7 @@ export default function SignupPage() {
       return;
     }
 
-    const { error: authError } = await supabase.auth.signUp({
+    const { data, error: authError } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
       options: {
@@ -60,8 +60,19 @@ export default function SignupPage() {
       return;
     }
 
-    router.push("/home");
-    router.refresh();
+    // Set cookies server-side so middleware can read them
+    if (data.session) {
+      await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        }),
+      });
+    }
+
+    window.location.href = "/home";
   };
 
   const update = (field: string, value: string) =>
