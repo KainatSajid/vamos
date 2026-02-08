@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   try {
     const { title, location, date, time } = await request.json();
 
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const prompt = `You are a friendly assistant for a social app called Vamos. 
     

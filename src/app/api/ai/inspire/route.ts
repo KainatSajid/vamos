@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   try {
     const { vibe, social, time, duration, aloneOk } = await request.json();
 
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const now = new Date();
     const currentTime = now.toLocaleTimeString();

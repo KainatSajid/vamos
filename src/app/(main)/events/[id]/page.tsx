@@ -11,11 +11,17 @@ export default async function EventDetailPage({
 
   const { data: event } = await supabase
     .from("events")
-    .select("*, host:profiles!events_host_id_fkey(*)")
+    .select("*")
     .eq("id", params.id)
     .single();
 
   if (!event) notFound();
 
-  return <EventDetailClient event={event} />;
+  const { data: host } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", event.host_id)
+    .single();
+
+  return <EventDetailClient event={{ ...event, host }} />;
 }
