@@ -35,44 +35,65 @@ export default function CirclesPage() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) { setLoading(false); return; }
 
-    // Load circles with members
-    const { data: circleData } = await supabase
-      .from("circles")
-      .select("*")
-      .eq("owner_id", user.id);
+      // Load circles
+      const { data: circleData } = await supabase
+        .from("circles")
+        .select("*")
+        .eq("owner_id", user.id);
 
-    const circlesWithMembers = await Promise.all(
-      (circleData || []).map(async (c) => {
-        const { data: members } = await supabase
-          .from("circle_members")
-          .select("*, profile:profiles(*)")
-          .eq("circle_id", c.id);
-        return {
-          ...c,
-          members: (members || []).map((m: any) => m.profile).filter(Boolean),
-        };
-      })
-    );
+      const circlesWithMembers = await Promise.all(
+        (circleData || []).map(async (c) => {
+          const { data: memberRows } = await supabase
+            .from("circle_members")
+            .select("user_id")
+            .eq("circle_id", c.id);
 
-    setCircles(circlesWithMembers);
+          const memberIds = (memberRows || []).map((m: any) => m.user_id);
+          let members: Profile[] = [];
+          if (memberIds.length > 0) {
+            const { data: profiles } = await supabase
+              .from("profiles")
+              .select("*")
+              .in("id", memberIds);
+            members = profiles || [];
+          }
 
-    // Load accepted friends
-    const { data: friendships } = await supabase
-      .from("friendships")
-      .select("*, friend:profiles!friendships_friend_id_fkey(*), requester:profiles!friendships_user_id_fkey(*)")
-      .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`)
-      .eq("status", "accepted");
+          return { ...c, members };
+        })
+      );
 
-    const friendProfiles = (friendships || []).map((f: any) =>
-      f.user_id === user.id ? f.friend : f.requester
-    ).filter(Boolean);
+      setCircles(circlesWithMembers);
 
-    setFriends(friendProfiles);
+      // Load accepted friends
+      const { data: friendships } = await supabase
+        .from("friendships")
+        .select("*")
+        .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`)
+        .eq("status", "accepted");
+
+      const friendIds = (friendships || []).map((f: any) =>
+        f.user_id === user.id ? f.friend_id : f.user_id
+      );
+
+      let friendProfiles: Profile[] = [];
+      if (friendIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("*")
+          .in("id", friendIds);
+        friendProfiles = profiles || [];
+      }
+
+      setFriends(friendProfiles);
+    } catch (err) {
+      console.error("Failed to load circles:", err);
+    }
     setLoading(false);
   }, [supabase]);
 

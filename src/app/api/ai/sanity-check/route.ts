@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
 
     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
-    const prompt = `You are a friendly assistant for a social app called ¡Vamos!. 
+    const prompt = `You are a friendly assistant for a social app called Vamos. 
     
 Someone is planning this event:
 - Title: ${title}

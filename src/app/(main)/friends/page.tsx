@@ -35,40 +35,61 @@ export default function FriendsPage() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
 
   const load = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-    setCurrentUserId(user.id);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) { setLoading(false); return; }
+      setCurrentUserId(user.id);
 
-    const { data: allFriendships } = await supabase
-      .from("friendships")
-      .select(
-        "*, friend:profiles!friendships_friend_id_fkey(*), requester:profiles!friendships_user_id_fkey(*)"
-      )
-      .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`);
+      // Get all friendships involving this user
+      const { data: allFriendships, error } = await supabase
+        .from("friendships")
+        .select("*")
+        .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`);
 
-    const accepted: (Profile & { friendshipId: string })[] = [];
-    const received: (Profile & { friendshipId: string })[] = [];
-    const sent: (Profile & { friendshipId: string })[] = [];
+      if (error) { console.error("Friendships query error:", error); setLoading(false); return; }
 
-    (allFriendships || []).forEach((f: any) => {
-      if (f.status === "accepted") {
-        const profile = f.user_id === user.id ? f.friend : f.requester;
-        if (profile) accepted.push({ ...profile, friendshipId: f.id });
-      } else if (f.friend_id === user.id) {
-        // I received this request
-        if (f.requester)
-          received.push({ ...f.requester, friendshipId: f.id });
-      } else {
-        // I sent this request
-        if (f.friend) sent.push({ ...f.friend, friendshipId: f.id });
-      }
-    });
+      // Collect all profile IDs we need to fetch
+      const profileIds = new Set<string>();
+      (allFriendships || []).forEach((f: any) => {
+        profileIds.add(f.user_id);
+        profileIds.add(f.friend_id);
+      });
+      profileIds.delete(user.id);
 
-    setFriends(accepted);
-    setPendingReceived(received);
-    setPendingSent(sent);
+      // Fetch all profiles in one query
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("*")
+        .in("id", Array.from(profileIds));
+
+      const profileMap = new Map((profiles || []).map((p: Profile) => [p.id, p]));
+
+      const accepted: (Profile & { friendshipId: string })[] = [];
+      const received: (Profile & { friendshipId: string })[] = [];
+      const sent: (Profile & { friendshipId: string })[] = [];
+
+      (allFriendships || []).forEach((f: any) => {
+        const otherId = f.user_id === user.id ? f.friend_id : f.user_id;
+        const profile = profileMap.get(otherId);
+        if (!profile) return;
+
+        if (f.status === "accepted") {
+          accepted.push({ ...profile, friendshipId: f.id });
+        } else if (f.friend_id === user.id) {
+          received.push({ ...profile, friendshipId: f.id });
+        } else {
+          sent.push({ ...profile, friendshipId: f.id });
+        }
+      });
+
+      setFriends(accepted);
+      setPendingReceived(received);
+      setPendingSent(sent);
+    } catch (err) {
+      console.error("Failed to load friends:", err);
+    }
     setLoading(false);
   }, [supabase]);
 

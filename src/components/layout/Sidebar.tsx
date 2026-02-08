@@ -23,12 +23,10 @@ export default function Sidebar({ profile }: SidebarProps) {
   const router = useRouter();
   const supabase = createClient();
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  };
-
+const handleLogout = async () => {
+  await fetch("/api/auth/logout", { method: "POST" });
+  window.location.href = "/login";
+};
   const initials = profile.display_name
     .split(" ")
     .map((n) => n[0])
@@ -38,7 +36,7 @@ export default function Sidebar({ profile }: SidebarProps) {
 
   return (
     <aside className="w-64 border-r border-cream-300/40 bg-cream-50 h-screen sticky top-0 flex flex-col p-6 hidden md:flex">
-      <div className="mb-10">
+      <div className="mb-10 text-center">
         <Logo />
       </div>
 

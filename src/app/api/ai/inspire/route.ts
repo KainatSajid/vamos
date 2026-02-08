@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     const currentTime = now.toLocaleTimeString();
     const currentDate = now.toLocaleDateString();
 
-    const prompt = `You are an assistant for a social app called ¡Vamos! that helps people find spontaneous activities.
+    const prompt = `You are an assistant for a social app called Vamos that helps people find spontaneous activities.
 
 Search for 3 real, specific venues or public spaces that fit a "${vibe}" vibe.
 Social context: ${social}.

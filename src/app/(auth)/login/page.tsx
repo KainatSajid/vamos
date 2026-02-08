@@ -98,7 +98,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full btn-brand py-4 text-base flex items-center justify-center gap-3 group disabled:opacity-60"
           >
-            <span>{loading ? "Signing in..." : "Enter ¡Vamos!"}</span>
+            <span>{loading ? "Signing in..." : "Enter Vamos"}</span>
             {!loading && (
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             )}
